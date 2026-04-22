@@ -1,13 +1,40 @@
 import { createClient } from '@supabase/supabase-js';
+import { createHmac } from 'crypto';
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
   process.env.NEXT_PUBLIC_SUPABASE_KEY!
 );
 
+// Validar firma de MercadoPago (seguridad)
+function validarFirmaMP(signature: string, timestamp: string, body: string, secret: string): boolean {
+  if (!signature || !timestamp || !secret) return false;
+  
+  const manifest = `id:${body};request-id:${timestamp};ts:${timestamp};`;
+  const firma = createHmac('sha256', secret).update(manifest).digest('hex');
+  
+  return firma === signature;
+}
+
 export async function POST(request: Request) {
   try {
-    const body = await request.json();
+    // Leer headers para validar firma
+    const signature = request.headers.get('x-signature');
+    const timestamp = request.headers.get('x-timestamp');
+    const bodyRaw = await request.text();
+    
+    // Validar firma del webhook (opcional pero recomendado)
+    const webhookSecret = process.env.MP_WEBHOOK_SECRET;
+    if (webhookSecret && signature && timestamp) {
+      const bodyJson = JSON.parse(bodyRaw);
+      const esValida = validarFirmaMP(signature, timestamp, bodyJson.data?.id?.toString() || '', webhookSecret);
+      if (!esValida) {
+        console.error('Firma de webhook inválida');
+        return Response.json({ ok: false, error: 'Firma inválida' }, { status: 401 });
+      }
+    }
+    
+    const body = JSON.parse(bodyRaw);
     
     // Solo procesar notificaciones de payment
     if (body.type !== 'payment') {
