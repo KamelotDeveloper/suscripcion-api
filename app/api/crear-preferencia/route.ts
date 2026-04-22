@@ -1,3 +1,6 @@
+import { createClient } from '@supabase/supabase-js';
+import { randomUUID } from 'crypto';
+
 const headers = {
   'Content-Type': 'application/json',
   'Access-Control-Allow-Origin': '*',
@@ -22,9 +25,9 @@ export async function POST(request: Request) {
 
     // Precios hardcodeados en servidor (NO confiar en cliente)
     const precios: Record<string, number> = {
-      '1_mes': 1,
-      '6_meses': 1,
-      '1_anio': 1,
+      '1_mes': 35000,
+      '6_meses': 180000,
+      '1_anio': 300000,
     };
 
     if (!precios[plan]) {
@@ -34,10 +37,12 @@ export async function POST(request: Request) {
       );
     }
 
+    // Generar referencia única para tracking
+    const externalRef = `ERP-${randomUUID()}`;
     const nombrePlanes: Record<string, string> = {
-      '1_mes': 'Suscripcion ERP Mes #T' + Date.now(),
-      '6_meses': 'Suscripcion ERP Semestral #T' + Date.now(),
-      '1_anio': 'Suscripcion ERP Anual #T' + Date.now(),
+      '1_mes': 'Suscripcion Mensual ERP',
+      '6_meses': 'Suscripcion Semestral ERP',
+      '1_anio': 'Suscripcion Anual ERP',
     };
 
     const mpResponse = await fetch(
@@ -57,11 +62,12 @@ export async function POST(request: Request) {
               currency_id: 'ARS',
             },
           ],
-          external_reference: client_id,
+          external_reference: externalRef,
           metadata: {
             client_id: client_id,
             plan: plan,
             email: email,
+            ref: externalRef,
           },
           notification_url: `${process.env.NEXT_PUBLIC_SUPABASE_URL?.replace('/rest/v1', '')}/api/webhook`,
           back_urls: {
@@ -89,6 +95,7 @@ export async function POST(request: Request) {
       ok: true,
       init_point: data.init_point,
       preference_id: data.id,
+      external_ref: externalRef,
     }, { headers });
 
   } catch (error) {
