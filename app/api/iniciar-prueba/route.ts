@@ -5,6 +5,17 @@ const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_KEY!
 );
 
+const headers = {
+  'Content-Type': 'application/json',
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Methods': 'POST, OPTIONS',
+  'Access-Control-Allow-Headers': 'Content-Type',
+};
+
+export async function OPTIONS() {
+  return new Response(null, { status: 200, headers });
+}
+
 export async function POST(request: Request) {
   try {
     const { client_id, email } = await request.json();
@@ -12,11 +23,10 @@ export async function POST(request: Request) {
     if (!client_id || !email) {
       return Response.json(
         { error: 'client_id y email requeridos' }, 
-        { status: 400 }
+        { status: 400, headers }
       );
     }
 
-    // Verificar si ya tiene suscripción activa
     const { data: existente } = await supabase
       .from('suscripciones')
       .select('*')
@@ -24,7 +34,6 @@ export async function POST(request: Request) {
       .single();
 
     if (existente) {
-      // Ya existe, verificar estado
       const ahora = new Date();
       const expira = new Date(existente.fecha_expiracion);
       
@@ -35,12 +44,11 @@ export async function POST(request: Request) {
             mensaje: 'Ya tienes suscripción activa',
             estado: existente.estado,
             fecha_expiracion: existente.fecha_expiracion
-          });
+          }, { headers });
         }
       }
     }
 
-    // Crear prueba gratis de 7 días
     const fechaExpiracion = new Date();
     fechaExpiracion.setDate(fechaExpiracion.getDate() + 7);
 
@@ -57,10 +65,9 @@ export async function POST(request: Request) {
       }, { onConflict: 'client_id' });
 
     if (error) {
-      console.error('Error:', error);
       return Response.json(
         { error: 'Error al iniciar prueba' },
-        { status: 500 }
+        { status: 500, headers }
       );
     }
 
@@ -68,13 +75,13 @@ export async function POST(request: Request) {
       ok: true,
       mensaje: 'Prueba gratis de 7 días activada',
       fecha_expiracion: fechaExpiracion.toISOString()
-    });
+    }, { headers });
 
   } catch (error) {
     console.error('Error:', error);
     return Response.json(
       { error: 'Error interno del servidor' }, 
-      { status: 500 }
+      { status: 500, headers }
     );
   }
 }

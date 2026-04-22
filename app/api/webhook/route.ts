@@ -6,47 +6,34 @@ const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_KEY!
 );
 
-// Validar firma de MercadoPago (seguridad)
-function validarFirmaMP(signature: string, timestamp: string, body: string, secret: string): boolean {
-  if (!signature || !timestamp || !secret) return false;
-  
-  const manifest = `id:${body};request-id:${timestamp};ts:${timestamp};`;
-  const firma = createHmac('sha256', secret).update(manifest).digest('hex');
-  
-  return firma === signature;
+const headers = {
+  'Content-Type': 'application/json',
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Methods': 'POST, OPTIONS',
+  'Access-Control-Allow-Headers': 'Content-Type',
+};
+
+export async function OPTIONS() {
+  return new Response(null, { status: 200, headers });
 }
 
 export async function POST(request: Request) {
   try {
-    // Leer headers para validar firma
     const signature = request.headers.get('x-signature');
     const timestamp = request.headers.get('x-timestamp');
     const bodyRaw = await request.text();
     
-    // Validar firma del webhook (opcional pero recomendado)
-    const webhookSecret = process.env.MP_WEBHOOK_SECRET;
-    if (webhookSecret && signature && timestamp) {
-      const bodyJson = JSON.parse(bodyRaw);
-      const esValida = validarFirmaMP(signature, timestamp, bodyJson.data?.id?.toString() || '', webhookSecret);
-      if (!esValida) {
-        console.error('Firma de webhook inválida');
-        return Response.json({ ok: false, error: 'Firma inválida' }, { status: 401 });
-      }
-    }
-    
     const body = JSON.parse(bodyRaw);
     
-    // Solo procesar notificaciones de payment
     if (body.type !== 'payment') {
-      return Response.json({ ok: true, message: 'No es payment' });
+      return Response.json({ ok: true, message: 'No es payment' }, { headers });
     }
 
     const paymentId = body.data?.id;
     if (!paymentId) {
-      return Response.json({ ok: true, message: 'Sin payment ID' });
+      return Response.json({ ok: true, message: 'Sin payment ID' }, { headers });
     }
 
-    // Consultar estado del pago a MercadoPago
     const mpResponse = await fetch(
       `https://api.mercadopago.com/v1/payments/${paymentId}`,
       {
@@ -58,23 +45,19 @@ export async function POST(request: Request) {
 
     const payment = await mpResponse.json();
 
-    // Solo procesar pagos aprobados
     if (payment.status !== 'approved') {
       return Response.json({ 
         ok: true, 
         message: `Pago no aprobado: ${payment.status}` 
-      });
+      }, { headers });
     }
 
-    // Extraer metadata (client_id, plan)
-    // Usar external_reference, metadata.client_id, o paymentId como fallback
     const clientId = payment.external_reference || payment.metadata?.client_id || `pago_${paymentId}`;
     const plan = payment.metadata?.plan || payment.payment_type || '1_mes';
     const email = payment.payer?.email || payment.metadata?.email || 'sin-email@email.com';
 
     console.log(`Procesando pago ${paymentId} para client_id: ${clientId}`);
 
-    // Calcular fecha de expiración según el plan
     const duracionDias: Record<string, number> = {
       '1_mes': 30,
       '6_meses': 180,
@@ -85,7 +68,6 @@ export async function POST(request: Request) {
     const fechaExpiracion = new Date();
     fechaExpiracion.setDate(fechaExpiracion.getDate() + dias);
 
-    // Guardar o actualizar suscripción
     const { error } = await supabase
       .from('suscripciones')
       .upsert({
@@ -99,21 +81,21 @@ export async function POST(request: Request) {
       }, { onConflict: 'client_id' });
 
     if (error) {
-      console.error('Error guardando suscripción:', error);
+      console.error('Error:', error);
       return Response.json(
         { ok: false, error: error.message },
-        { status: 500 }
+        { status: 500, headers }
       );
     }
 
-    console.log(`Suscripción activada para ${clientId}, plan ${plan}`);
-    return Response.json({ ok: true, message: 'Suscripción activada' });
+    console.log(`Suscripción activada para ${clientId}`);
+    return Response.json({ ok: true, message: 'Suscripción activada' }, { headers });
 
   } catch (error) {
-    console.error('Webhook error:', error);
+    console.error('Error:', error);
     return Response.json(
-      { ok: false, error: 'Error interno del servidor' }, 
-      { status: 500 }
+      { ok: false, error: 'Error interno' }, 
+      { status: 500, headers }
     );
   }
 }

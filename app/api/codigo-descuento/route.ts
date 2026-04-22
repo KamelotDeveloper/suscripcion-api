@@ -5,6 +5,17 @@ const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_KEY!
 );
 
+const headers = {
+  'Content-Type': 'application/json',
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Methods': 'POST, OPTIONS',
+  'Access-Control-Allow-Headers': 'Content-Type',
+};
+
+export async function OPTIONS() {
+  return new Response(null, { status: 200, headers });
+}
+
 export async function POST(request: Request) {
   try {
     const { codigo } = await request.json();
@@ -12,7 +23,7 @@ export async function POST(request: Request) {
     if (!codigo) {
       return Response.json(
         { error: 'Código requerido' }, 
-        { status: 400 }
+        { status: 400, headers }
       );
     }
 
@@ -24,21 +35,22 @@ export async function POST(request: Request) {
 
     if (error || !data) {
       return Response.json(
-        { valido: false, error: 'Código inválido' }
+        { valido: false, error: 'Código inválido' },
+        { headers }
       );
     }
 
-    // Verificar expiración
     if (data.fecha_expiracion && new Date(data.fecha_expiracion) < new Date()) {
       return Response.json(
-        { valido: false, error: 'Código expirado' }
+        { valido: false, error: 'Código expirado' },
+        { headers }
       );
     }
 
-    // Verificar usos
     if (data.usos_actuales >= data.usos_maximos) {
       return Response.json(
-        { valido: false, error: 'Código agotado' }
+        { valido: false, error: 'Código agotado' },
+        { headers }
       );
     }
 
@@ -47,13 +59,13 @@ export async function POST(request: Request) {
       descuento: data.descuento_porcentaje,
       plan_objetivo: data.plan_objetivo,
       mensaje: `¡Código válido! ${data.descuento_porcentaje}% de descuento`
-    });
+    }, { headers });
 
   } catch (error) {
     console.error('Error:', error);
     return Response.json(
       { error: 'Error interno del servidor' }, 
-      { status: 500 }
+      { status: 500, headers }
     );
   }
 }
