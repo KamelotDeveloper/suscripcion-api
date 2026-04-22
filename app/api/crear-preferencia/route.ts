@@ -35,9 +35,9 @@ export async function POST(request: Request) {
     }
 
     const nombrePlanes: Record<string, string> = {
-      '1_mes': 'El Menestral ERP - Plan Mensual',
-      '6_meses': 'El Menestral ERP - Plan Semestral',
-      '1_anio': 'El Menestral ERP - Plan Anual',
+      '1_mes': 'Suscripcion ERP Mes #T' + Date.now(),
+      '6_meses': 'Suscripcion ERP Semestral #T' + Date.now(),
+      '1_anio': 'Suscripcion ERP Anual #T' + Date.now(),
     };
 
     const mpResponse = await fetch(
