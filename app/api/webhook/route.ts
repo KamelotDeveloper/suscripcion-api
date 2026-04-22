@@ -67,17 +67,12 @@ export async function POST(request: Request) {
     }
 
     // Extraer metadata (client_id, plan)
-    const clientId = payment.external_reference || payment.metadata?.client_id;
-    const plan = payment.metadata?.plan || '1_mes';
-    const email = payment.payer?.email || 'sin-email@email.com';
+    // Usar external_reference, metadata.client_id, o paymentId como fallback
+    const clientId = payment.external_reference || payment.metadata?.client_id || `pago_${paymentId}`;
+    const plan = payment.metadata?.plan || payment.payment_type || '1_mes';
+    const email = payment.payer?.email || payment.metadata?.email || 'sin-email@email.com';
 
-    if (!clientId) {
-      console.error('No se encontró client_id en el pago');
-      return Response.json(
-        { ok: false, error: 'Sin client_id' },
-        { status: 400 }
-      );
-    }
+    console.log(`Procesando pago ${paymentId} para client_id: ${clientId}`);
 
     // Calcular fecha de expiración según el plan
     const duracionDias: Record<string, number> = {
