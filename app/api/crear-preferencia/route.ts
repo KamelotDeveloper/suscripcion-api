@@ -25,7 +25,7 @@ export async function POST(request: Request) {
 
     // Precios hardcodeados en servidor (NO confiar en cliente)
     const precios: Record<string, number> = {
-      '1_mes': 100,
+      '1_mes': 1,
       '6_meses': 180000,
       '1_anio': 300000,
     };
