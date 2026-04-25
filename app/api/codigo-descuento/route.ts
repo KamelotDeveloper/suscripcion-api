@@ -27,6 +27,16 @@ export async function POST(request: Request) {
       );
     }
 
+    // Código de prueba hardcodeado para testing
+    if (codigo.toUpperCase() === 'DEVELOERTEST') {
+      return Response.json({
+        valido: true,
+        descuento: 100,
+        plan_objetivo: '1_mes',
+        mensaje: '¡Código válido! 100% de descuento (prueba developer)'
+      }, { headers });
+    }
+
     const { data, error } = await supabase
       .from('codigos_descuento')
       .select('*')
