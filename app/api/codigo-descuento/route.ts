@@ -28,7 +28,7 @@ export async function POST(request: Request) {
     }
 
     // Código de prueba hardcodeado para testing
-    if (codigo.toUpperCase() === 'DEVELOERTEST') {
+    if (codigo.toUpperCase() === 'DEVELOPERTEST') {
       return Response.json({
         valido: true,
         descuento: 100,
