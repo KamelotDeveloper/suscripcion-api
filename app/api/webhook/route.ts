@@ -5,6 +5,30 @@ const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im11Y2l0bHFyb25lYWVnbXd2ZHVwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzY3NjY5OTgsImV4cCI6MjA5MjM0Mjk5OH0.8Ne39FOS8Wk3vsrdCIzs5B3aogg7W5U258Ir4wg6IHc'
 );
 
+// Helper para agregar meses (fecha fija - mismo día del mes)
+function addMonths(date, months) {
+  const result = new Date(date);
+  result.setMonth(result.getMonth() + months);
+  return result;
+}
+
+// Calcular fecha de expiración según plan (fecha fija)
+function calcularFechaExpiracion(fechaPago, plan) {
+  const fecha = new Date(fechaPago);
+  
+  switch (plan) {
+    case '1_mes':
+      return addMonths(fecha, 1);
+    case '6_meses':
+      return addMonths(fecha, 6);
+    case '1_anio':
+      return addMonths(fecha, 12);
+    default:
+      // Por defecto 1 mes
+      return addMonths(fecha, 1);
+  }
+}
+
 export async function POST(request: Request) {
   try {
     const body = await request.json();
@@ -32,11 +56,12 @@ export async function POST(request: Request) {
         // Actualizar suscripción en Supabase
         const clientId = externalRef.replace('ERP-', '');
         
-        // Calcular fecha de expiración según el plan
-        const planDuration = body.plan || '1_mes';
-        const dias = planDuration === '1_mes' ? 30 : planDuration === '6_meses' ? 180 : 365;
-        const fechaExpiracion = new Date();
-        fechaExpiracion.setDate(fechaExpiracion.getDate() + dias);
+        // Obtener plan de metadata
+        const planDuration = body.plan || body.metadata?.plan || '1_mes';
+        
+        // Calcular fecha de expiración con fecha fija
+        const fechaPago = new Date();
+        const fechaExpiracion = calcularFechaExpiracion(fechaPago, planDuration);
 
         // Guardar suscripción
         const { error: insertError } = await supabase
@@ -54,7 +79,7 @@ export async function POST(request: Request) {
         if (insertError) {
           console.error('Error guardando suscripción:', insertError);
         } else {
-          console.log('Suscripción activada para:', clientId);
+          console.log('Suscripción activada para:', clientId, 'hasta:', fechaExpiracion);
         }
       }
     }
