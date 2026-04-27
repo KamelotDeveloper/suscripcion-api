@@ -27,6 +27,23 @@ export async function POST(request: Request) {
       );
     }
 
+    // VERIFICACIÓN CLAVE: ¿Este client_id ya usó la prueba alguna vez?
+    // Aunque desinstale y reinstale, no puede usar la prueba de nuevo
+    const { data: pruebaExistente } = await supabase
+      .from('usuarios_prueba')
+      .select('*')
+      .eq('client_id', client_id)
+      .single();
+
+    if (pruebaExistente) {
+      return Response.json({
+        ok: false,
+        mensaje: 'Ya usaste tu prueba gratis. Adquirí un plan para continuar.',
+        error: 'prueba_agotada'
+      }, { headers });
+    }
+
+    // Verificar si tiene suscripción activa
     const { data: existente } = await supabase
       .from('suscripciones')
       .select('*')
@@ -49,9 +66,11 @@ export async function POST(request: Request) {
       }
     }
 
+    // Calcular fecha de expiración (7 días)
     const fechaExpiracion = new Date();
     fechaExpiracion.setDate(fechaExpiracion.getDate() + 7);
 
+    // Iniciar prueba
     const { error } = await supabase
       .from('suscripciones')
       .upsert({
@@ -70,6 +89,14 @@ export async function POST(request: Request) {
         { status: 500, headers }
       );
     }
+
+    // REGISTRAR que este client_id usó la prueba (para siempre)
+    await supabase
+      .from('usuarios_prueba')
+      .insert({
+        client_id: client_id,
+        fecha_uso: new Date().toISOString()
+      });
 
     return Response.json({
       ok: true,
