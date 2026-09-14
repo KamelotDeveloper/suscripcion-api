@@ -19,7 +19,7 @@ export async function OPTIONS() {
 
 export async function POST(request: Request) {
   try {
-    const { client_id } = await request.json();
+    const { client_id, app_id = 'ordo' } = await request.json();
 
     if (!client_id) {
       return Response.json(
@@ -32,6 +32,7 @@ export async function POST(request: Request) {
       .from('suscripciones')
       .select('*')
       .eq('client_id', client_id)
+      .eq('app_id', app_id)
       .single();
 
     if (error || !suscripcion) {

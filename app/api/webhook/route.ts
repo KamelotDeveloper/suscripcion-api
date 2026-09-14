@@ -33,55 +33,71 @@ export async function POST(request: Request) {
   try {
     const body = await request.json();
     
-    console.log('Webhook收到的数据:', JSON.stringify(body, null, 2));
+    console.log('Webhook recibido:', JSON.stringify(body, null, 2));
 
-    // MercadoPago envía los datos del pago en.topic y action
-    const topic = body.topic || '';
-    const action = body.action || '';
-
-    // Buscar la preferencia en los metadatos
-    // MercadoPago envía la información del pago
-    const paymentId = body.payment_id || body.id || body.data?.id;
+    // MercadoPago envía los datos del pago en topic/action o type
+    const topic = body.topic || body.type || '';
     const status = body.status || body.data?.status;
 
-    console.log('Payment ID:', paymentId, 'Status:', status);
+    // Buscar la preferencia en los metadatos
+    const paymentId = body.payment_id || body.id || body.data?.id;
 
-    if (topic === 'payment' && status === 'approved') {
-      // El pago fue aprobado - activar suscripción
-      // Los datos del cliente están en external_reference o metadata
-      const externalRef = body.external_reference;
-      
-      // Parsear external_reference para obtener client_id
-      if (externalRef && externalRef.startsWith('ERP-')) {
-        // Actualizar suscripción en Supabase
-        const clientId = externalRef.replace('ERP-', '');
-        
-        // Obtener plan de metadata
-        const planDuration = body.plan || body.metadata?.plan || '1_mes';
-        
-        // Calcular fecha de expiración con fecha fija
-        const fechaPago = new Date();
-        const fechaExpiracion = calcularFechaExpiracion(fechaPago, planDuration);
+    console.log('Payment ID:', paymentId, 'Status:', status, 'Topic:', topic);
 
-        // Guardar suscripción
-        const { error: insertError } = await supabase
-          .from('suscripciones')
-          .upsert({
-            client_id: clientId,
-            plan: planDuration,
-            estado: 'activa',
-            fecha_inicio: new Date().toISOString(),
-            fecha_expiracion: fechaExpiracion.toISOString(),
-            payment_id: paymentId,
-            mp_response: JSON.stringify(body)
-          });
+    if (topic !== 'payment' || status !== 'approved' || !paymentId) {
+      return Response.json({ received: true });
+    }
 
-        if (insertError) {
-          console.error('Error guardando suscripción:', insertError);
-        } else {
-          console.log('Suscripción activada para:', clientId, 'hasta:', fechaExpiracion);
-        }
+    // external_reference trae `${app_id}:${client_id}` (sin ':' en los valores)
+    const externalRef = body.external_reference;
+
+    let appId = 'ordo';
+    let clientId: string | undefined;
+
+    if (externalRef && typeof externalRef === 'string') {
+      const separator = externalRef.indexOf(':');
+      if (separator !== -1) {
+        appId = externalRef.slice(0, separator) || 'ordo';
+        clientId = externalRef.slice(separator + 1);
+      } else {
+        // Back-compat: ERP-<uuid> de preferencias viejas o client_id pelado
+        clientId = externalRef.replace(/^ERP-/, '');
       }
+    } else {
+      // Si no hay external_reference, fallback al comportamiento actual con app_id 'ordo'
+      clientId = body.metadata?.client_id;
+    }
+
+    if (!clientId) {
+      console.log('Webhook sin client_id, se ignora:', paymentId);
+      return Response.json({ received: true });
+    }
+
+    // El pago fue aprobado - activar la suscripción en la fila (client_id, app_id)
+    const planDuration = body.plan || body.metadata?.plan || '1_mes';
+
+    // Calcular fecha de expiración con fecha fija
+    const fechaPago = new Date();
+    const fechaExpiracion = calcularFechaExpiracion(fechaPago, planDuration);
+
+    // Guardar suscripción (una fila por (client_id, app_id))
+    const { error: insertError } = await supabase
+      .from('suscripciones')
+      .upsert({
+        client_id: clientId,
+        app_id: appId,
+        plan: planDuration,
+        estado: 'activo',
+        fecha_inicio: new Date().toISOString(),
+        fecha_expiracion: fechaExpiracion.toISOString(),
+        mp_payment_id: paymentId,
+        mp_response: JSON.stringify(body)
+      }, { onConflict: 'client_id,app_id' });
+
+    if (insertError) {
+      console.error('Error guardando suscripción:', insertError);
+    } else {
+      console.log(`Suscripción activada para (${appId}, ${clientId}) hasta:`, fechaExpiracion);
     }
 
     return Response.json({ received: true });

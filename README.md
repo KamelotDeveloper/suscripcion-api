@@ -1,4 +1,4 @@
-# API de Suscripción - El Menestral ERP
+# API de Suscripción - Ordo ERP
 
 API para manejar suscripciones, pruebas gratis y códigos de descuento.
 

@@ -1,5 +1,4 @@
 import { createClient } from '@supabase/supabase-js';
-import { randomUUID } from 'crypto';
 
 const headers = {
   'Content-Type': 'application/json',
@@ -14,7 +13,7 @@ export async function OPTIONS() {
 
 export async function POST(request: Request) {
   try {
-    const { client_id, plan, email } = await request.json();
+    const { client_id, app_id = 'ordo', plan, email } = await request.json();
 
     if (!client_id || !plan || !email) {
       return Response.json(
@@ -23,9 +22,18 @@ export async function POST(request: Request) {
       );
     }
 
-    // Precios hardcodeados en servidor (NO confiar en cliente)
+    // Contrato: external_reference = `${app_id}:${client_id}`.
+    // Los valores no pueden contener ':' porque el webhook hace split por el primer ':'
+    if (client_id.indexOf(':') !== -1 || app_id.indexOf(':') !== -1) {
+      return Response.json(
+        { ok: false, error: 'app_id y client_id no pueden contener ":"' },
+        { status: 400, headers }
+      );
+    }
+
+    // Precios - $10 para pruebas, precios reales para producción
     const precios: Record<string, number> = {
-      '1_mes': 35000,
+      '1_mes': 10, // $10 para probar hastaq funcione
       '6_meses': 180000,
       '1_anio': 300000,
     };
@@ -37,8 +45,9 @@ export async function POST(request: Request) {
       );
     }
 
-    // Generar referencia única para tracking
-    const externalRef = `ERP-${randomUUID()}`;
+    // Referencia que codifica (app_id, client_id) para que el webhook registre
+    // el pago en la fila correcta. Sin UUID random: la fuente de verdad es el par.
+    const externalRef = `${app_id}:${client_id}`;
     const nombrePlanes: Record<string, string> = {
       '1_mes': 'Suscripcion Mensual ERP',
       '6_meses': 'Suscripcion Semestral ERP',
@@ -65,15 +74,16 @@ export async function POST(request: Request) {
           external_reference: externalRef,
           metadata: {
             client_id: client_id,
+            app_id: app_id,
             plan: plan,
             email: email,
             ref: externalRef,
           },
-          notification_url: `https://suscripcion-api-kc5t.vercel.app/api/webhook`,
+          notification_url: process.env.NOTIFICATION_URL || 'https://suscripcion-api-kc5t.vercel.app/api/webhook',
           back_urls: {
-            success: `https://suscripcion-api-kc5t.vercel.app/api/success`,
-            failure: `https://suscripcion-api-kc5t.vercel.app/api/failure`,
-            pending: `https://suscripcion-api-kc5t.vercel.app/api/pending`,
+            success: `${process.env.NEXT_PUBLIC_SUPABASE_URL?.replace('/rest/v1', '')}/success`,
+            failure: `${process.env.NEXT_PUBLIC_SUPABASE_URL?.replace('/rest/v1', '')}/failure`,
+            pending: `${process.env.NEXT_PUBLIC_SUPABASE_URL?.replace('/rest/v1', '')}/pending`,
           },
           auto_return: 'approved',
         }),

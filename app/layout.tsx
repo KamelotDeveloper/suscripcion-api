@@ -1,5 +1,5 @@
 export const metadata = {
-  title: 'API de Suscripción - El Menestral ERP',
+  title: 'API de Suscripción - Ordo ERP',
   description: 'Sistema de suscripción y pagos',
 }
 

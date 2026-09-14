@@ -18,7 +18,7 @@ export async function OPTIONS() {
 
 export async function POST(request: Request) {
   try {
-    const { client_id, email } = await request.json();
+    const { client_id, email, app_id = 'ordo' } = await request.json();
 
     if (!client_id || !email) {
       return Response.json(
@@ -27,12 +27,14 @@ export async function POST(request: Request) {
       );
     }
 
-    // VERIFICACIÓN CLAVE: ¿Este client_id ya usó la prueba alguna vez?
-    // Aunque desinstale y reinstale, no puede usar la prueba de nuevo
+    // VERIFICACIÓN CLAVE: ¿Este (client_id, app_id) ya usó la prueba alguna vez?
+    // La licencia es POR APP: usar la prueba en una app no te la niega en la otra.
+    // Aunque desinstale y reinstale, no puede usar la prueba de nuevo en esa app.
     const { data: pruebaExistente } = await supabase
       .from('usuarios_prueba')
       .select('*')
       .eq('client_id', client_id)
+      .eq('app_id', app_id)
       .single();
 
     if (pruebaExistente) {
@@ -43,11 +45,12 @@ export async function POST(request: Request) {
       }, { headers });
     }
 
-    // Verificar si tiene suscripción activa
+    // Verificar si tiene suscripción activa para esta app
     const { data: existente } = await supabase
       .from('suscripciones')
       .select('*')
       .eq('client_id', client_id)
+      .eq('app_id', app_id)
       .single();
 
     if (existente) {
@@ -70,18 +73,19 @@ export async function POST(request: Request) {
     const fechaExpiracion = new Date();
     fechaExpiracion.setDate(fechaExpiracion.getDate() + 7);
 
-    // Iniciar prueba
+    // Iniciar prueba (una fila por (client_id, app_id))
     const { error } = await supabase
       .from('suscripciones')
       .upsert({
         client_id: client_id,
+        app_id: app_id,
         email: email,
         plan: '1_mes',
         estado: 'prueba',
         fecha_inicio: new Date().toISOString(),
         fecha_expiracion: fechaExpiracion.toISOString(),
         mp_payment_id: null
-      }, { onConflict: 'client_id' });
+      }, { onConflict: 'client_id,app_id' });
 
     if (error) {
       return Response.json(
@@ -90,11 +94,12 @@ export async function POST(request: Request) {
       );
     }
 
-    // REGISTRAR que este client_id usó la prueba (para siempre)
+    // REGISTRAR que este (client_id, app_id) usó la prueba (para siempre)
     await supabase
       .from('usuarios_prueba')
       .insert({
         client_id: client_id,
+        app_id: app_id,
         fecha_uso: new Date().toISOString()
       });
 
