@@ -1,5 +1,5 @@
 export const metadata = {
-  title: 'API de Suscripción - Ordo ERP',
+  title: 'API de Suscripción - GA Software',
   description: 'Sistema de suscripción y pagos',
 }
 

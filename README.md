@@ -1,4 +1,4 @@
-# API de Suscripción - Ordo ERP
+# API de Suscripción - GA Software
 
 API para manejar suscripciones, pruebas gratis y códigos de descuento.
 

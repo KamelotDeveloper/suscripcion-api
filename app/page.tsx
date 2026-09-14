@@ -7,7 +7,7 @@ export default function Home() {
       margin: '0 auto' 
     }}>
       <h1>API de Suscripción</h1>
-      <p>Ordo ERP - Sistema de Suscripción</p>
+      <p>GA Software - Sistema de Suscripción</p>
       
       <h2>Endpoints disponibles:</h2>
       <ul>
