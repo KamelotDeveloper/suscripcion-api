@@ -1,9 +1,5 @@
 import { createClient } from '@supabase/supabase-js';
-
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.NEXT_PUBLIC_SUPABASE_KEY!
-);
+import { KNOWN_APPS, PLAN_FALLBACK } from '../../../lib/mp-contract';
 
 const headers = {
   'Content-Type': 'application/json',
@@ -12,32 +8,49 @@ const headers = {
   'Access-Control-Allow-Headers': 'Content-Type',
 };
 
+// Cliente lazy por request, claves solo desde el entorno
+function getSupabase() {
+  return createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_KEY || process.env.NEXT_PUBLIC_SUPABASE_KEY!
+  );
+}
+
 // Handle preflight
 export async function OPTIONS() {
   return new Response(null, { status: 200, headers });
 }
 
-export async function GET() {
+export async function GET(request: Request) {
   try {
-    const { data: planes, error } = await supabase
-      .from('planes')
-      .select('*')
-      .order('precio', { ascending: true });
+    const appId = new URL(request.url).searchParams.get('app_id');
 
-    if (error) {
-      console.error('Error fetching planes:', error);
+    if (!appId || !KNOWN_APPS.includes(appId)) {
       return Response.json(
-        { ok: false, error: 'Error cargando planes' },
-        { status: 500, headers }
+        { ok: false, error: 'app_id requerido. Use: ordo o canyp' },
+        { status: 400, headers }
       );
     }
 
+    const { data: planes, error } = await getSupabase()
+      .from('planes_suscripcion')
+      .select('*')
+      .eq('app_id', appId)
+      .eq('activo', true)
+      .order('precio', { ascending: true });
+
+    // Fallback al catálogo del contrato si Supabase falla o devuelve vacío
+    const fuente = error || !planes || planes.length === 0
+      ? PLAN_FALLBACK[appId]
+      : planes;
+
     // Mapear datos de Supabase al formato que espera el frontend
-    const planesFormateados = planes.map((p: any) => ({
+    const planesFormateados = fuente.map((p: any) => ({
       id: p.id,
       nombre: p.nombre.toUpperCase(),
       precio: p.precio,
       descripcion: p.descripcion,
+      dias: p.dias,
       color: p.color || '#2e86de',
       precioMensual: p.precio_mensual,
       feature: p.feature || []
@@ -50,8 +63,10 @@ export async function GET() {
         id: 'prueba',
         nombre: 'PRUEBA',
         precio: 0,
+        dias: 7,
         descripcion: '7 días gratis',
         color: '#22c55e',
+        precioMensual: 0,
         feature: ['Acceso completo al ERP', '7 días de uso', 'Solo 1 vez por dispositivo']
       });
     }

@@ -1,108 +1,27 @@
 import { createClient } from '@supabase/supabase-js';
+import { handleWebhook, type WebhookSupabaseClient } from '../../../lib/webhook-handler.ts';
 
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://mucitlqroneaegmwvdup.supabase.co',
-  process.env.NEXT_PUBLIC_SUPABASE_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im11Y2l0bHFyb25lYWVnbXd2ZHVwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzY3NjY5OTgsImV4cCI6MjA5MjM0Mjk5OH0.8Ne39FOS8Wk3vsrdCIzs5B3aogg7W5U258Ir4wg6IHc'
-);
+// POST es un thin wrapper: la política completa vive en handleWebhook
+// (lib/webhook-handler.ts) para que los tests la importen sin red.
+// Este archivo NO exporta nada fuera de los métodos HTTP (requisito de
+// Next.js para route.ts — exportar helpers rompe `next build`).
+//
+// Import desde '../app/api/webhook/route' queda prohibido por la
+// restricción de tipos de Next; los tests importan de lib/.
 
-// Helper para agregar meses (fecha fija - mismo día del mes)
-function addMonths(date, months) {
-  const result = new Date(date);
-  result.setMonth(result.getMonth() + months);
-  return result;
-}
-
-// Calcular fecha de expiración según plan (fecha fija)
-function calcularFechaExpiracion(fechaPago, plan) {
-  const fecha = new Date(fechaPago);
-  
-  switch (plan) {
-    case '1_mes':
-      return addMonths(fecha, 1);
-    case '6_meses':
-      return addMonths(fecha, 6);
-    case '1_anio':
-      return addMonths(fecha, 12);
-    default:
-      // Por defecto 1 mes
-      return addMonths(fecha, 1);
-  }
-}
-
+// Cliente lazy por request, creado DESPUÉS del fail-loud de entorno.
+// Jamás key anónima hardcodeada ni fallbacks silenciosos (G5).
+// El cast es un adapter boundary: el cliente real es compatible en runtime
+// con la interfaz mínima del handler, pero los generics de postgrest no
+// satisfacen el subset tipográfico exacto que la interfaz declara.
 export async function POST(request: Request) {
-  try {
-    const body = await request.json();
-    
-    console.log('Webhook recibido:', JSON.stringify(body, null, 2));
-
-    // MercadoPago envía los datos del pago en topic/action o type
-    const topic = body.topic || body.type || '';
-    const status = body.status || body.data?.status;
-
-    // Buscar la preferencia en los metadatos
-    const paymentId = body.payment_id || body.id || body.data?.id;
-
-    console.log('Payment ID:', paymentId, 'Status:', status, 'Topic:', topic);
-
-    if (topic !== 'payment' || status !== 'approved' || !paymentId) {
-      return Response.json({ received: true });
-    }
-
-    // external_reference trae `${app_id}:${client_id}` (sin ':' en los valores)
-    const externalRef = body.external_reference;
-
-    let appId = 'ordo';
-    let clientId: string | undefined;
-
-    if (externalRef && typeof externalRef === 'string') {
-      const separator = externalRef.indexOf(':');
-      if (separator !== -1) {
-        appId = externalRef.slice(0, separator) || 'ordo';
-        clientId = externalRef.slice(separator + 1);
-      } else {
-        // Back-compat: ERP-<uuid> de preferencias viejas o client_id pelado
-        clientId = externalRef.replace(/^ERP-/, '');
-      }
-    } else {
-      // Si no hay external_reference, fallback al comportamiento actual con app_id 'ordo'
-      clientId = body.metadata?.client_id;
-    }
-
-    if (!clientId) {
-      console.log('Webhook sin client_id, se ignora:', paymentId);
-      return Response.json({ received: true });
-    }
-
-    // El pago fue aprobado - activar la suscripción en la fila (client_id, app_id)
-    const planDuration = body.plan || body.metadata?.plan || '1_mes';
-
-    // Calcular fecha de expiración con fecha fija
-    const fechaPago = new Date();
-    const fechaExpiracion = calcularFechaExpiracion(fechaPago, planDuration);
-
-    // Guardar suscripción (una fila por (client_id, app_id))
-    const { error: insertError } = await supabase
-      .from('suscripciones')
-      .upsert({
-        client_id: clientId,
-        app_id: appId,
-        plan: planDuration,
-        estado: 'activo',
-        fecha_inicio: new Date().toISOString(),
-        fecha_expiracion: fechaExpiracion.toISOString(),
-        mp_payment_id: paymentId,
-        mp_response: JSON.stringify(body)
-      }, { onConflict: 'client_id,app_id' });
-
-    if (insertError) {
-      console.error('Error guardando suscripción:', insertError);
-    } else {
-      console.log(`Suscripción activada para (${appId}, ${clientId}) hasta:`, fechaExpiracion);
-    }
-
-    return Response.json({ received: true });
-  } catch (error) {
-    console.error('Webhook error:', error);
-    return Response.json({ error: 'Error processing webhook' }, { status: 500 });
-  }
+  return handleWebhook(request, {
+    env: process.env,
+    fetchImpl: fetch,
+    getSupabase: () =>
+      createClient(
+        process.env.NEXT_PUBLIC_SUPABASE_URL!,
+        process.env.SUPABASE_SERVICE_KEY!
+      ) as unknown as WebhookSupabaseClient,
+  });
 }
