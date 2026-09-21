@@ -1,14 +1,14 @@
-// Route-level tests for the webhook policy (spec G5 + G7).
+﻿// Route-level tests for the webhook policy (spec G5 + G7).
 // Runner: node --test --experimental-strip-types (same as mp-contract.test.ts).
-// No network: fetch → fake MercadoPago API, getSupabase → in-memory fake client.
+// No network: fetch â†’ fake MercadoPago API, getSupabase â†’ in-memory fake client.
 // Covers: env fail-loud 500s, paymentId extraction, GET /v1/payments truth
 // source, approved vs non-approved gate, external_reference first-':' parse,
-// ERP- back-compat, unknown app_id → 400, idempotent re-delivery, expiry from
+// ERP- back-compat, unknown app_id â†’ 400, idempotent re-delivery, expiry from
 // plan dias (planes_suscripcion).
 //
 // handleWebhook vive en lib/ (no en app/api/) porque Next.js exige que un
-// route.ts exporte SOLO métodos HTTP — exportar helpers desde la ruta rompe
-// `next build`. Los tests importan la política del módulo, no del wrapper.
+// route.ts exporte SOLO mÃ©todos HTTP â€” exportar helpers desde la ruta rompe
+// `next build`. Los tests importan la polÃ­tica del mÃ³dulo, no del wrapper.
 
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
@@ -17,7 +17,7 @@ import { handleWebhook } from '../lib/webhook-handler.ts';
 
 type Json = any;
 
-// ─── Fake Supabase client (in-memory, records upserts / reads) ─────────
+// â”€â”€â”€ Fake Supabase client (in-memory, records upserts / reads) â”€â”€â”€â”€â”€â”€â”€â”€â”€
 interface UpsertLog {
   table: string;
   payload: Record<string, unknown>;
@@ -77,7 +77,7 @@ class FakeSupabase {
   }
 }
 
-// ─── Fake global fetch (MercadoPago API) ───────────────────────────────
+// â”€â”€â”€ Fake global fetch (MercadoPago API) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 function makeFetch(handler: (url: string, init?: RequestInit) => Promise<Json>) {
   const calls: Array<{ url: string; init?: RequestInit }> = [];
   const impl: typeof fetch = (async (url: unknown, init?: RequestInit) => {
@@ -95,7 +95,7 @@ function mpError(status: number) {
   return { ok: false, status, json: async () => ({}) };
 }
 
-// ─── Fixtures ───────────────────────────────────────────────────────────
+// â”€â”€â”€ Fixtures â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 const BASE_ENV = {
   NEXT_PUBLIC_SUPABASE_URL: 'https://nrysusllouuytjlwdyvn.supabase.co',
   SUPABASE_SERVICE_KEY: 'svc-key-test',
@@ -111,7 +111,7 @@ const approvedPayment = (over: Json = {}) => ({
 });
 
 function webhookRequest(body: unknown): Request {
-  return new Request('https://suscipcion-api-kc5t.vercel.app/api/webhook', {
+  return new Request('https://suscripcion-api.vercel.app/api/webhook', {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify(body),
@@ -138,7 +138,7 @@ function setup(
   return { supabase, fetchStub, deps };
 }
 
-// ─── G5: env fail-loud ─────────────────────────────────────────────────
+// â”€â”€â”€ G5: env fail-loud â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 describe('webhook env fail-loud (G5)', () => {
   it('500 when SUPABASE_SERVICE_KEY missing, no MP call', async () => {
     const { supabase, fetchStub, deps } = setup({ env: { ...BASE_ENV, SUPABASE_SERVICE_KEY: undefined } });
@@ -159,9 +159,9 @@ describe('webhook env fail-loud (G5)', () => {
   });
 });
 
-// ─── Body parsing / paymentId extraction ───────────────────────────────
+// â”€â”€â”€ Body parsing / paymentId extraction â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 describe('webhook body parsing', () => {
-  it('body without any payment id → 200 ack, no MP call, no upsert', async () => {
+  it('body without any payment id â†’ 200 ack, no MP call, no upsert', async () => {
     const { supabase, fetchStub, deps } = setup();
     const res = await handleWebhook(webhookRequest({ type: 'payment' }), deps);
     assert.equal(res.status, 200);
@@ -188,9 +188,9 @@ describe('webhook body parsing', () => {
     assert.equal(supabase.upserts[0].payload.mp_payment_id, 'mp-9');
   });
 
-  it('malformed JSON body → 500 Error processing webhook', async () => {
+  it('malformed JSON body â†’ 500 Error processing webhook', async () => {
     const { deps } = setup();
-    const bad = new Request('https://suscipcion-api-kc5t.vercel.app/api/webhook', {
+    const bad = new Request('https://suscripcion-api.vercel.app/api/webhook', {
       method: 'POST',
       body: '{not-json',
     });
@@ -200,9 +200,9 @@ describe('webhook body parsing', () => {
   });
 });
 
-// ─── Approved gate (G2/G5) ─────────────────────────────────────────────
+// â”€â”€â”€ Approved gate (G2/G5) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 describe('webhook approved gate', () => {
-  it('non-approved payment → 200 ack, NO upsert, NO supabase reads', async () => {
+  it('non-approved payment â†’ 200 ack, NO upsert, NO supabase reads', async () => {
     const { supabase, deps } = setup({ payment: approvedPayment({ status: 'pending' }) });
     const res = await handleWebhook(webhookRequest({ type: 'payment', data: { id: 'mp-x' } }), deps);
     assert.equal(res.status, 200);
@@ -212,7 +212,7 @@ describe('webhook approved gate', () => {
     assert.equal(supabase.store.size, 0);
   });
 
-  it('MP verification fails (GET !ok) → 500 Failed to verify payment', async () => {
+  it('MP verification fails (GET !ok) â†’ 500 Failed to verify payment', async () => {
     const { supabase, deps } = setup({ paymentStatus: 404 });
     const res = await handleWebhook(webhookRequest({ type: 'payment', data: { id: 'mp-404' } }), deps);
     assert.equal(res.status, 500);
@@ -221,9 +221,9 @@ describe('webhook approved gate', () => {
   });
 });
 
-// ─── Approved upsert (G5/G7) ───────────────────────────────────────────
+// â”€â”€â”€ Approved upsert (G5/G7) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 describe('webhook approved upsert', () => {
-  it('approved "ordo:client-1" → upsert activo with contract metadata', async () => {
+  it('approved "ordo:client-1" â†’ upsert activo with contract metadata', async () => {
     const { supabase, deps } = setup();
     const res = await handleWebhook(webhookRequest({ type: 'payment', data: { id: 'mp-123' } }), deps);
     assert.equal(res.status, 200);
@@ -242,7 +242,7 @@ describe('webhook approved upsert', () => {
     assert.ok(String(p.mp_response).includes('"approved"'));
   });
 
-  it('ERP- back-compat ref → app ordo, ERP- prefix stripped from client', async () => {
+  it('ERP- back-compat ref â†’ app ordo, ERP- prefix stripped from client', async () => {
     const { supabase, deps } = setup({
       payment: approvedPayment({
         external_reference: 'ERP-uuid-123',
@@ -259,7 +259,7 @@ describe('webhook approved upsert', () => {
     assert.equal(p.plan, '6_meses');
   });
 
-  it('unknown app_id in external_reference → explicit 400, no upsert', async () => {
+  it('unknown app_id in external_reference â†’ explicit 400, no upsert', async () => {
     const { supabase, deps } = setup({
       payment: approvedPayment({
         external_reference: 'unknown-app:c-123',
@@ -274,9 +274,9 @@ describe('webhook approved upsert', () => {
   });
 });
 
-// ─── Expiry from plan dias (G6) ────────────────────────────────────────
+// â”€â”€â”€ Expiry from plan dias (G6) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 describe('webhook expiry (G6)', () => {
-  it('6_meses plan → fecha_expiracion = now + 180 days from planes_suscripcion', async () => {
+  it('6_meses plan â†’ fecha_expiracion = now + 180 days from planes_suscripcion', async () => {
     const { supabase, deps } = setup();
     const before = Date.now();
     const res = await handleWebhook(webhookRequest({ type: 'payment', data: { id: 'mp-123' } }), deps);
@@ -288,7 +288,7 @@ describe('webhook expiry (G6)', () => {
     assert.ok(expiry <= after + 180 * 86400000 + 5000, 'expiry not after now+180d');
   });
 
-  it('plan absent from planes_suscripcion → contract fallback dias (planDias) applies', async () => {
+  it('plan absent from planes_suscripcion â†’ contract fallback dias (planDias) applies', async () => {
     // Custom fake seeded with ONLY 6_meses so '1_mes' resolves to null in DB
     // and the route falls back to planDias('1_mes') = 30 (G6 fallback).
     const supabase = new FakeSupabase();
@@ -308,9 +308,9 @@ describe('webhook expiry (G6)', () => {
   });
 });
 
-// ─── Idempotency (G5/G7) ───────────────────────────────────────────────
+// â”€â”€â”€ Idempotency (G5/G7) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 describe('webhook idempotency (G5)', () => {
-  it('re-delivery of same mp_payment_id → second call does NOT re-write', async () => {
+  it('re-delivery of same mp_payment_id â†’ second call does NOT re-write', async () => {
     const { supabase, deps } = setup({ payment: approvedPayment({ id: 'mp-123' }) });
     const r1 = await handleWebhook(webhookRequest({ type: 'payment', data: { id: 'mp-123' } }), deps);
     const r2 = await handleWebhook(webhookRequest({ type: 'payment', data: { id: 'mp-123' } }), deps);
@@ -321,7 +321,7 @@ describe('webhook idempotency (G5)', () => {
     assert.equal(supabase.store.size, 1);
   });
 
-  it('upsert error from Supabase → 500 Error saving subscription', async () => {
+  it('upsert error from Supabase â†’ 500 Error saving subscription', async () => {
     const { supabase, deps } = setup();
     supabase.upsertError = { message: 'boom' };
     const res = await handleWebhook(webhookRequest({ type: 'payment', data: { id: 'mp-123' } }), deps);

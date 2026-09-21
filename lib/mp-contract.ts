@@ -40,7 +40,7 @@ export const PLAN_DIAS: Record<string, number> = {
 };
 
 // Vercel origin (NOT the Supabase domain): back_urls must resolve here.
-export const CHECKOUT_ORIGIN = 'https://suscipcion-api-kc5t.vercel.app';
+export const CHECKOUT_ORIGIN = 'https://suscripcion-api.vercel.app';
 export const NOTIFICATION_URL = `${CHECKOUT_ORIGIN}/api/webhook`;
 
 // Keyed by plan id -> {precio, dias, ...}; null when the app is unknown.
