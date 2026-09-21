@@ -1,15 +1,19 @@
-// Route-level tests for app/api/webhook/route.ts (spec G5 + G7).
+// Route-level tests for the webhook policy (spec G5 + G7).
 // Runner: node --test --experimental-strip-types (same as mp-contract.test.ts).
 // No network: fetch → fake MercadoPago API, getSupabase → in-memory fake client.
 // Covers: env fail-loud 500s, paymentId extraction, GET /v1/payments truth
 // source, approved vs non-approved gate, external_reference first-':' parse,
 // ERP- back-compat, unknown app_id → 400, idempotent re-delivery, expiry from
 // plan dias (planes_suscripcion).
+//
+// handleWebhook vive en lib/ (no en app/api/) porque Next.js exige que un
+// route.ts exporte SOLO métodos HTTP — exportar helpers desde la ruta rompe
+// `next build`. Los tests importan la política del módulo, no del wrapper.
 
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 
-import { handleWebhook } from '../app/api/webhook/route.ts';
+import { handleWebhook } from '../lib/webhook-handler.ts';
 
 type Json = any;
 
