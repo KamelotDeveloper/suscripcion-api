@@ -1,4 +1,6 @@
-<!DOCTYPE html>
+export const dynamic = 'force-static';
+
+const html = `<!DOCTYPE html>
 <html lang="es">
 <head>
   <meta charset="UTF-8">
@@ -18,4 +20,10 @@
 <!-- 
   IMPORTANTE: Esta página redirige a la app en http://localhost:5173
   El usuario será redirigido automáticamente después del pago exitoso.
--->
+-->`;
+
+export function GET() {
+  return new Response(html, {
+    headers: { 'Content-Type': 'text/html; charset=utf-8' },
+  });
+}
