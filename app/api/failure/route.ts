@@ -1,4 +1,6 @@
-<!DOCTYPE html>
+export const dynamic = 'force-static';
+
+const html = `<!DOCTYPE html>
 <html lang="es">
 <head>
   <meta charset="UTF-8">
@@ -78,4 +80,10 @@
     <a href="#" class="btn" onclick="window.close()">Cerrar</a>
   </div>
 </body>
-</html>
+</html>`;
+
+export function GET() {
+  return new Response(html, {
+    headers: { 'Content-Type': 'text/html; charset=utf-8' },
+  });
+}
