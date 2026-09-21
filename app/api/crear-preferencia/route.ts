@@ -145,6 +145,7 @@ export async function POST(request: Request) {
     return Response.json({
       ok: true,
       init_point: data.init_point,
+      sandbox_init_point: data.sandbox_init_point,
       preference_id: data.id,
       external_ref: externalRef,
     }, { headers });
