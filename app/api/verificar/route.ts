@@ -2,7 +2,7 @@ import { createClient } from '@supabase/supabase-js';
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.NEXT_PUBLIC_SUPABASE_KEY!
+  process.env.SUPABASE_SERVICE_KEY || process.env.NEXT_PUBLIC_SUPABASE_KEY!
 );
 
 const headers = {
@@ -45,13 +45,23 @@ export async function POST(request: Request) {
     }
 
     const ahora = new Date();
-    const expira = new Date(suscripcion.fecha_expiracion);
-    const activo = suscripcion.estado === 'prueba' || 
-                   (suscripcion.estado === 'activo' && expira > ahora);
+    const expira = suscripcion.fecha_expiracion ? new Date(suscripcion.fecha_expiracion) : null;
+    const vigente = expira ? expira > ahora : false;
+    // 'prueba' es equivalente activo (D5); 'pendiente' NO es activo (G2):
+    // el pago aún no fue aprobado por el webhook.
+    const activo = suscripcion.estado === 'prueba' ||
+                   (suscripcion.estado === 'activo' && vigente);
 
-    const diasRestantes = activo 
-      ? Math.ceil((expira.getTime() - ahora.getTime()) / (1000 * 60 * 60 * 24))
+    const diasRestantes = activo
+      ? Math.ceil(((expira as Date).getTime() - ahora.getTime()) / (1000 * 60 * 60 * 24))
       : 0;
+
+    let mensaje = activo
+      ? `Suscripción activa (${diasRestantes} días)`
+      : 'Suscripción expirada';
+    if (suscripcion.estado === 'pendiente') {
+      mensaje = 'Pago pendiente de aprobación';
+    }
 
     return Response.json({
       activo,
@@ -59,9 +69,7 @@ export async function POST(request: Request) {
       plan: suscripcion.plan,
       fecha_expiracion: suscripcion.fecha_expiracion,
       dias_restantes: diasRestantes,
-      mensaje: activo 
-        ? `Suscripción activa (${diasRestantes} días)` 
-        : 'Suscripción expirada'
+      mensaje
     }, { headers });
 
   } catch (error) {

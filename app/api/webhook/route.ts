@@ -1,108 +1,172 @@
 import { createClient } from '@supabase/supabase-js';
+import { KNOWN_APPS, parseExternalReference, planDias, expiryFromDias } from '../../../lib/mp-contract.ts';
 
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://mucitlqroneaegmwvdup.supabase.co',
-  process.env.NEXT_PUBLIC_SUPABASE_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im11Y2l0bHFyb25lYWVnbXd2ZHVwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzY3NjY5OTgsImV4cCI6MjA5MjM0Mjk5OH0.8Ne39FOS8Wk3vsrdCIzs5B3aogg7W5U258Ir4wg6IHc'
-);
+// ── Injectable deps (slice C: route-level tests under plain node) ──────
+// handleWebhook holds the full policy; POST is a thin wrapper. Tests stub
+// fetch + Supabase with no network (G7). HTTP contract is unchanged: same
+// statuses, same messages, same ordering (env fail-loud before parsing).
 
-// Helper para agregar meses (fecha fija - mismo día del mes)
-function addMonths(date, months) {
-  const result = new Date(date);
-  result.setMonth(result.getMonth() + months);
-  return result;
+export interface WebhookEnv {
+  [key: string]: string | undefined;
 }
 
-// Calcular fecha de expiración según plan (fecha fija)
-function calcularFechaExpiracion(fechaPago, plan) {
-  const fecha = new Date(fechaPago);
-  
-  switch (plan) {
-    case '1_mes':
-      return addMonths(fecha, 1);
-    case '6_meses':
-      return addMonths(fecha, 6);
-    case '1_anio':
-      return addMonths(fecha, 12);
-    default:
-      // Por defecto 1 mes
-      return addMonths(fecha, 1);
-  }
+export interface WebhookSelectResult<T = any> {
+  data: T | null;
+  error: unknown;
 }
 
-export async function POST(request: Request) {
+export interface WebhookUpsertResult {
+  data: unknown;
+  error: unknown;
+}
+
+export interface WebhookQueryBuilder<T = any> {
+  select(columns: string): WebhookQueryBuilder<T>;
+  eq(column: string, value: unknown): WebhookQueryBuilder<T>;
+  maybeSingle(): PromiseLike<WebhookSelectResult<T>>;
+  upsert(
+    payload: Record<string, unknown>,
+    options?: { onConflict?: string }
+  ): WebhookQueryBuilder<T> & PromiseLike<WebhookUpsertResult>;
+}
+
+export interface WebhookSupabaseClient {
+  from(table: string): WebhookQueryBuilder<any>;
+}
+
+export interface WebhookDeps {
+  env: WebhookEnv;
+  fetchImpl: typeof fetch;
+  getSupabase: () => WebhookSupabaseClient;
+}
+
+export async function handleWebhook(request: Request, deps: WebhookDeps): Promise<Response> {
+  const { env, fetchImpl, getSupabase } = deps;
   try {
+    // Fail-loud (G5): sin estas variables NO se procesa nada.
+    // Sin la service key, el upsert fallaría por RLS en silencio.
+    if (!env.SUPABASE_SERVICE_KEY) {
+      return Response.json({ error: 'SUPABASE_SERVICE_KEY missing' }, { status: 500 });
+    }
+    if (!env.MP_ACCESS_TOKEN) {
+      return Response.json({ error: 'MP_ACCESS_TOKEN missing' }, { status: 500 });
+    }
+
     const body = await request.json();
-    
+
     console.log('Webhook recibido:', JSON.stringify(body, null, 2));
 
-    // MercadoPago envía los datos del pago en topic/action o type
-    const topic = body.topic || body.type || '';
-    const status = body.status || body.data?.status;
+    // Las notificaciones reales de MP solo mandan { type: 'payment', data: { id }, ... }.
+    // El pago se valida llamando a la API de MercadoPago con el id.
+    const paymentId = body.data?.id || body.id || body.payment_id;
 
-    // Buscar la preferencia en los metadatos
-    const paymentId = body.payment_id || body.id || body.data?.id;
-
-    console.log('Payment ID:', paymentId, 'Status:', status, 'Topic:', topic);
-
-    if (topic !== 'payment' || status !== 'approved' || !paymentId) {
+    if (!paymentId) {
+      console.log('Webhook sin payment id, se ignora');
       return Response.json({ received: true });
     }
 
-    // external_reference trae `${app_id}:${client_id}` (sin ':' en los valores)
-    const externalRef = body.external_reference;
+    // Fuente de verdad: pedir el pago a MercadoPago
+    const mpResp = await fetchImpl(
+      `https://api.mercadopago.com/v1/payments/${paymentId}`,
+      { headers: { Authorization: `Bearer ${env.MP_ACCESS_TOKEN}` } }
+    );
 
-    let appId = 'ordo';
-    let clientId: string | undefined;
-
-    if (externalRef && typeof externalRef === 'string') {
-      const separator = externalRef.indexOf(':');
-      if (separator !== -1) {
-        appId = externalRef.slice(0, separator) || 'ordo';
-        clientId = externalRef.slice(separator + 1);
-      } else {
-        // Back-compat: ERP-<uuid> de preferencias viejas o client_id pelado
-        clientId = externalRef.replace(/^ERP-/, '');
-      }
-    } else {
-      // Si no hay external_reference, fallback al comportamiento actual con app_id 'ordo'
-      clientId = body.metadata?.client_id;
+    if (!mpResp.ok) {
+      console.error('Error verificando pago en MP:', paymentId, mpResp.status);
+      return Response.json({ error: 'Failed to verify payment' }, { status: 500 });
     }
 
-    if (!clientId) {
-      console.log('Webhook sin client_id, se ignora:', paymentId);
+    const payment = await mpResp.json();
+
+    if (payment.status !== 'approved') {
+      console.log('Pago no aprobado, se ignora:', paymentId, payment.status);
+      return Response.json({ received: true });
+    }
+
+    // external_reference trae `${app_id}:${client_id}` (sin ':' en los valores).
+    // El split por el primer ':' y el back-compat ERP- viven en el contrato (lib).
+    const externalRef = payment.external_reference || payment.metadata?.ref;
+    let { appId, clientId } = parseExternalReference(externalRef);
+
+    if (!appId && payment.metadata?.app_id) appId = payment.metadata.app_id;
+    if (!clientId && payment.metadata?.client_id) clientId = payment.metadata.client_id;
+
+    // App desconocida => 400 explícito, NUNCA default silencioso a 'ordo' (G5).
+    if (appId && !KNOWN_APPS.includes(appId)) {
+      console.error('Webhook con app_id desconocido:', appId);
+      return Response.json({ error: 'Unknown app_id' }, { status: 400 });
+    }
+
+    if (!appId || !clientId) {
+      console.log('Webhook sin client_id/app_id, se ignora:', paymentId);
       return Response.json({ received: true });
     }
 
     // El pago fue aprobado - activar la suscripción en la fila (client_id, app_id)
-    const planDuration = body.plan || body.metadata?.plan || '1_mes';
+    const planDuration = payment.metadata?.plan || '1_mes';
 
-    // Calcular fecha de expiración con fecha fija
-    const fechaPago = new Date();
-    const fechaExpiracion = calcularFechaExpiracion(fechaPago, planDuration);
+    // Duración canónica (G6): dias de planes_suscripcion, fallback al contrato.
+    // expiración = ahora + dias (espejo de timedelta(days=dias), sin addMonths).
+    const { data: planDb } = await getSupabase()
+      .from('planes_suscripcion')
+      .select('dias')
+      .eq('app_id', appId)
+      .eq('id', planDuration)
+      .maybeSingle();
+    const dias = planDb?.dias ?? planDias(planDuration);
+    const fechaExpiracion = expiryFromDias(dias);
+
+    // Guarda de idempotencia: mismo payment_id ya activado => no reescribir (G5).
+    const { data: existente } = await getSupabase()
+      .from('suscripciones')
+      .select('mp_payment_id, estado')
+      .eq('client_id', clientId)
+      .eq('app_id', appId)
+      .maybeSingle();
+
+    if (existente?.mp_payment_id === paymentId && existente?.estado === 'activo') {
+      console.log('Webhook duplicado, sin cambios:', paymentId);
+      return Response.json({ received: true });
+    }
 
     // Guardar suscripción (una fila por (client_id, app_id))
-    const { error: insertError } = await supabase
+    const { error: insertError } = await getSupabase()
       .from('suscripciones')
       .upsert({
         client_id: clientId,
         app_id: appId,
         plan: planDuration,
+        email: payment.metadata?.email || null,
         estado: 'activo',
         fecha_inicio: new Date().toISOString(),
         fecha_expiracion: fechaExpiracion.toISOString(),
         mp_payment_id: paymentId,
-        mp_response: JSON.stringify(body)
+        mp_response: JSON.stringify(payment)
       }, { onConflict: 'client_id,app_id' });
 
     if (insertError) {
       console.error('Error guardando suscripción:', insertError);
-    } else {
-      console.log(`Suscripción activada para (${appId}, ${clientId}) hasta:`, fechaExpiracion);
+      return Response.json({ error: 'Error saving subscription' }, { status: 500 });
     }
 
+    console.log(`Suscripción activada para (${appId}, ${clientId}) hasta:`, fechaExpiracion);
     return Response.json({ received: true });
   } catch (error) {
     console.error('Webhook error:', error);
     return Response.json({ error: 'Error processing webhook' }, { status: 500 });
   }
+}
+
+// Cliente lazy por request, creado DESPUÉS del fail-loud de entorno.
+// Jamás key anónima hardcodeada ni fallbacks silenciosos (G5).
+export async function POST(request: Request) {
+  return handleWebhook(request, {
+    env: process.env,
+    fetchImpl: fetch,
+    getSupabase: () =>
+      createClient(
+        process.env.NEXT_PUBLIC_SUPABASE_URL!,
+        process.env.SUPABASE_SERVICE_KEY!
+      ),
+  });
 }
