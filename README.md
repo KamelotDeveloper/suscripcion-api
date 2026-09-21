@@ -11,9 +11,9 @@ API para manejar suscripciones, pruebas gratis y códigos de descuento.
 
 ## Variables de Entorno
 
-En **Vercel** agregar:
-- `NEXT_PUBLIC_SUPABASE_URL` = `https://nrysusllouuytjlwdyvn.supabase.co`
-- `NEXT_PUBLIC_SUPABASE_KEY` = `eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im5yeXN1c2xsb3V1eXRqbHdkeXZuIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzc5NDU2NTYsImV4cCI6MjA5MzUyMTY1Nn0.C_hYiLkCmXZDpPb1VoUaJiUd00S1nE25RTFsz2KJHII`
+En **Vercel** agregar (todas server-only, sin prefijo `NEXT_PUBLIC_`):
+- `NEXT_PUBLIC_SUPABASE_URL` = `https://nrysusllouuytjlwdyvn.supabase.co` (URL de API, no del dashboard)
+- `SUPABASE_ANON_KEY` = Supabase anon key (server-only)
 - `SUPABASE_SERVICE_KEY` = Service role key (Secret, server-only — NO prefix `NEXT_PUBLIC_`)
 - `MP_ACCESS_TOKEN` = Tu token de MercadoPago (Secret, server-only)
 

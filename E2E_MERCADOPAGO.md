@@ -11,8 +11,8 @@ Set these in Vercel → Project → Settings → Environment Variables:
 
 | Variable | Scope | Required | Notes |
 |---|---|---|---|
-| `NEXT_PUBLIC_SUPABASE_URL` | All | ✅ | `https://nrysusllouuytjlwdyvn.supabase.co` |
-| `NEXT_PUBLIC_SUPABASE_KEY` | All | ✅ | Supabase anon key (public, safe for client) |
+| `NEXT_PUBLIC_SUPABASE_URL` | All | ✅ | `https://nrysusllouuytjlwdyvn.supabase.co` (API URL, no el dashboard) |
+| `SUPABASE_ANON_KEY` | Server only | ✅ | Supabase anon key (server-only; este endpoint no expone nada al navegador) |
 | `SUPABASE_SERVICE_KEY` | Server only | ✅ | **Secret** — Supabase service_role key (used by webhook + crear-preferencia) |
 | `MP_ACCESS_TOKEN` | Server only | ✅ | **Secret** — MercadoPago access token (TEST mode for sandbox) |
 | `NOTIFICATION_URL` | Server | Auto | Derived in code from Vercel origin; do NOT set manually |
