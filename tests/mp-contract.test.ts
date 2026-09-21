@@ -246,11 +246,11 @@ describe('buildPreferencePayload', () => {
 // ─── Constants sanity ────────────────────────────────────────────────
 describe('constants', () => {
   it('CHECKOUT_ORIGIN is the Vercel URL', () => {
-    assert.equal(CHECKOUT_ORIGIN, 'https://suscipcion-api-kc5t.vercel.app');
+    assert.equal(CHECKOUT_ORIGIN, 'https://suscripcion-api.vercel.app');
   });
 
   it('NOTIFICATION_URL ends with /api/webhook', () => {
-    assert.equal(NOTIFICATION_URL, 'https://suscipcion-api-kc5t.vercel.app/api/webhook');
+    assert.equal(NOTIFICATION_URL, 'https://suscripcion-api.vercel.app/api/webhook');
   });
 
   it('PLAN_DIAS has 6 entries (3 ordo + 3 canyp)', () => {

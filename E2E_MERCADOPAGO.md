@@ -1,4 +1,4 @@
-# E2E MercadoPago — Manual Testing Checklist
+﻿# E2E MercadoPago â€” Manual Testing Checklist
 
 End-to-end verification for the MercadoPago integration (cobros-reales-mercadopago).
 This doc covers the full flow from preference creation through webhook confirmation.
@@ -7,17 +7,17 @@ This doc covers the full flow from preference creation through webhook confirmat
 
 ### Vercel Environment Variables
 
-Set these in Vercel → Project → Settings → Environment Variables:
+Set these in Vercel â†’ Project â†’ Settings â†’ Environment Variables:
 
 | Variable | Scope | Required | Notes |
 |---|---|---|---|
-| `NEXT_PUBLIC_SUPABASE_URL` | All | ✅ | `https://nrysusllouuytjlwdyvn.supabase.co` (API URL, no el dashboard) |
-| `SUPABASE_ANON_KEY` | Server only | ✅ | Supabase anon key (server-only; este endpoint no expone nada al navegador) |
-| `SUPABASE_SERVICE_KEY` | Server only | ✅ | **Secret** — Supabase service_role key (used by webhook + crear-preferencia) |
-| `MP_ACCESS_TOKEN` | Server only | ✅ | **Secret** — MercadoPago access token (TEST mode for sandbox) |
+| `NEXT_PUBLIC_SUPABASE_URL` | All | âœ… | `https://nrysusllouuytjlwdyvn.supabase.co` (API URL, no el dashboard) |
+| `SUPABASE_ANON_KEY` | Server only | âœ… | Supabase anon key (server-only; este endpoint no expone nada al navegador) |
+| `SUPABASE_SERVICE_KEY` | Server only | âœ… | **Secret** â€” Supabase service_role key (used by webhook + crear-preferencia) |
+| `MP_ACCESS_TOKEN` | Server only | âœ… | **Secret** â€” MercadoPago access token (TEST mode for sandbox) |
 | `NOTIFICATION_URL` | Server | Auto | Derived in code from Vercel origin; do NOT set manually |
 
-> ⚠️ `SUPABASE_SERVICE_KEY` and `MP_ACCESS_TOKEN` are **server-only Secrets**. Never expose them to the client.
+> âš ï¸ `SUPABASE_SERVICE_KEY` and `MP_ACCESS_TOKEN` are **server-only Secrets**. Never expose them to the client.
 
 ### Getting a TEST Token
 
@@ -45,7 +45,7 @@ venv\Scripts\activate
 uvicorn main:app --reload --port 8001
 ```
 
-### Backend .env — MP_ACCESS_TOKEN
+### Backend .env â€” MP_ACCESS_TOKEN
 
 The backend also needs `MP_ACCESS_TOKEN` in `backend/.env` for the `/suscripcion/crear-preferencia` endpoint. Use the same TEST token.
 
@@ -55,7 +55,7 @@ The backend also needs `MP_ACCESS_TOKEN` in `backend/.env` for the `/suscripcion
 
 **Web (Vercel):**
 ```
-POST https://suscipcion-api-kc5t.vercel.app/api/crear-preferencia
+POST https://suscripcion-api.vercel.app/api/crear-preferencia
 Content-Type: application/json
 
 {
@@ -89,20 +89,20 @@ Verify: `external_reference` is `ordo:test-e2e-001`, `metadata` contains `app_id
 3. Enter the sandbox card details (5031 7555 5552 0004)
 4. Approve the payment
 
-**Expected:** Redirects to `https://suscipcion-api-kc5t.vercel.app/api/success` (or failure/pending).
+**Expected:** Redirects to `https://suscripcion-api.vercel.app/api/success` (or failure/pending).
 
-> ⚠️ **Known Issue — Broken Redirect Routes:** The files `app/api/{success,failure,pending}/route.ts` contain raw HTML in TypeScript and break `next build`. They are the MP `back_urls` redirect targets. This is a **pre-existing issue** OUT OF SCOPE of this change. The redirect will show a Vercel 404 or build error, but the webhook should still fire. Fix these routes in a separate change.
+> âš ï¸ **Known Issue â€” Broken Redirect Routes:** The files `app/api/{success,failure,pending}/route.ts` contain raw HTML in TypeScript and break `next build`. They are the MP `back_urls` redirect targets. This is a **pre-existing issue** OUT OF SCOPE of this change. The redirect will show a Vercel 404 or build error, but the webhook should still fire. Fix these routes in a separate change.
 
 ### Step 3: Verify Webhook Received
 
-**Option A — Vercel Logs:**
-1. Go to Vercel → Project → Deployments → select latest → Logs
+**Option A â€” Vercel Logs:**
+1. Go to Vercel â†’ Project â†’ Deployments â†’ select latest â†’ Logs
 2. Filter for `/api/webhook`
 3. Look for `payment_id` extraction and upsert logs
 
-**Option B — MercadoPago Developers:**
+**Option B â€” MercadoPago Developers:**
 1. Go to [MercadoPago Developers](https://www.mercadopago.com.ar/developers)
-2. Select your app → **Webhooks** → **Historial**
+2. Select your app â†’ **Webhooks** â†’ **Historial**
 3. Verify the payment notification was received and processed (HTTP 200)
 
 **Expected:** Webhook received the `payment` event, extracted `payment_id`, called GET `/v1/payments/{id}`, confirmed `approved` status, upserted `suscripciones` row with `estado: 'activo'` and correct `fecha_expiracion`.
@@ -110,7 +110,7 @@ Verify: `external_reference` is `ordo:test-e2e-001`, `metadata` contains `app_id
 ### Step 4: Verify Subscription
 
 ```
-POST https://suscipcion-api-kc5t.vercel.app/api/verificar
+POST https://suscripcion-api.vercel.app/api/verificar
 Content-Type: application/json
 
 {
@@ -122,14 +122,14 @@ Content-Type: application/json
 ```json
 {
   "activo": true,
-  "mensaje": "Suscripción activa",
+  "mensaje": "SuscripciÃ³n activa",
   "fecha_expiracion": "2026-10-15T..."
 }
 ```
 
 ### Step 5: Check Supabase Row
 
-In Supabase → Table Editor → `suscripciones`:
+In Supabase â†’ Table Editor â†’ `suscripciones`:
 - `client_id`: `test-e2e-001`
 - `app_id`: `ordo`
 - `estado`: `activo`
