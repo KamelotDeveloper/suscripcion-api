@@ -24,6 +24,11 @@ entorno de despliegue (Vercel), nunca en el repo.** Resumen:
 | `MP_ACCESS_TOKEN` | Verificar el cobro contra la API de MercadoPago | 503, no activa |
 | `NEXT_PUBLIC_SUPABASE_KEY` | Solo lectura en los otros handlers | — |
 | `MP_WEBHOOK_SECRET` | (opcional) Validar el header `x-signature` | — |
+| `NEXT_PUBLIC_APP_URL` | A dónde manda al usuario la página de retorno (`/api/success`) | La página no redirige, muestra el estado y avisa |
+
+> `NEXT_PUBLIC_APP_URL` NO puede hardcodearse: antes `/api/success` apuntaba fijo a
+> `http://localhost:5173`, que funcionaba en la máquina del dueño y en producción
+> mandaba al usuario a un localhost inexistente. O sea: pagaba y no pasaba nada.
 
 El webhook **no tiene valores por defecto**: sin esas variables responde 503 a
 propósito, para que MercadoPago reintente y el fallo quede en el log, en vez de
@@ -83,14 +88,32 @@ Si la fila ya está `activo` con ese mismo `mp_payment_id`, se responde 200
 **sin recalcular `fecha_expiracion`**. MercadoPago reintenta hasta recibir un
 2xx, así que sin este freno cada reentrega regalaría días de licencia.
 
-### Qué hace falta para testearlo en serio
+### Tests
 
-Este repo no tiene infra de tests. La recomendación es agregar **vitest**:
-`lib/mp-contract.mjs` ya es puro y sin dependencias (se importa directo en un
-test sin mocks), y la ruta se puede testear con `fetch` y el cliente de Supabase
-mockeados — que es exactamente lo que se hizo con un script temporal durante el
-arranque de esta cadena. No se agregó vitest en este cambio para no meter
-dependencias nuevas sin acuerdo.
+`pnpm test` corre `tests/*.test.ts` con el runner de Node (`node --test`). No hay
+vitest ni jest: no se agregaron dependencias en este cambio, y para las rutas de
+retorno el runner nativo alcanza.
+
+La lógica de decisión del webhook (`lib/mp-contract.mjs`) sigue sin ejercitarse
+desde un test, y esa es la deuda real que queda. Es pura y sin dependencias, así
+que cuando se decida agregar vitest se importa directo en un test sin mocks; la
+ruta se puede cubrir con `fetch` y el cliente de Supabase mockeados — que es lo
+que se verificó con un script temporal durante el arranque de esta cadena.
+
+## Bug que destapó el build
+
+`app/api/{success,failure,pending}/route.ts` eran archivos HTML guardados con
+extensión `.ts`. Webpack los parseaba como TypeScript y `next build` fallaba con
+`Unexpected token '<'`. **El proyecto no era desplegable**, así que tampoco se
+podía desplegar el webhook corregido: la plata entraba y la licencia no se
+activaba, y no había forma de subir el arreglo.
+
+Ahora son route handlers de verdad y el HTML se arma en `lib/paginas-retorno.ts`.
+`tests/paginas-retorno.test.ts` mira exactamente la condición que se rompió
+(que esos archivos sean TypeScript parseable), así que el corte no vuelve.
+
+`pnpm lint` sigue sin poder correr: el repo no tiene configuración de ESLint y
+`next lint` entra en modo interactivo. Es una deuda previa, no de este cambio.
 
 ## Uso desde la App
 
